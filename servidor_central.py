@@ -1,4 +1,3 @@
-# servidor_central.py
 import zmq
 import threading
 import time
@@ -75,14 +74,12 @@ class ServidorCentral:
         while True:
             try:
                 mensaje = self.socket_rep.recv_json()
-                tiempo_inicio = time.time()
                 pos_usuario = tuple(mensaje['posicion'])
                 id_usuario = mensaje['id_usuario']
 
                 print(f"\nProcesando solicitud del Usuario {id_usuario} en posición {pos_usuario}")
 
                 taxi_id = self.encontrar_taxi_cercano(pos_usuario)
-                tiempo_respuesta = time.time() - tiempo_inicio
 
                 if taxi_id is not None:
                     with self.lock:
@@ -114,20 +111,21 @@ class ServidorCentral:
                             respuesta = {
                                 'exito': True,
                                 'taxi_id': taxi_id,
-                                'pos_taxi': pos_taxi,
-                                'tiempo_respuesta': tiempo_respuesta
+                                'pos_taxi': pos_taxi
                             }
                         else:
                             print(f"Servidor: Taxi {taxi_id} ya fue asignado, buscando otro...")
-                            respuesta = {'exito': False, 'tiempo_respuesta': tiempo_respuesta}
+                            respuesta = {'exito': False}
                 else:
                     print(f"Servidor: No hay taxis disponibles para Usuario {id_usuario}")
-                    respuesta = {'exito': False, 'tiempo_respuesta': tiempo_respuesta}
+                    respuesta = {'exito': False}
 
                 self.socket_rep.send_json(respuesta)
 
             except Exception as e:
                 print(f"Error procesando solicitud: {e}")
+                # En caso de error, enviar una respuesta de error
+                self.socket_rep.send_json({'exito': False, 'error': str(e)})
 
     def procesar_actualizaciones_taxis(self):
         while True:

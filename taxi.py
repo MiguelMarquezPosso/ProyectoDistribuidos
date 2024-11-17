@@ -146,6 +146,8 @@ class Taxi:
 
         if self.servicios >= 3:
             print(f"Taxi {self.id}: Completados todos los servicios del día")
+            # Esperamos un momento antes de finalizar el programa
+            time.sleep(1)
             self.running = False
 
     def iniciar(self):
@@ -154,7 +156,7 @@ class Taxi:
 
         # Iniciar hilo para escuchar asignaciones
         thread_asignaciones = threading.Thread(target=self.escuchar_asignaciones)
-        thread_asignaciones.daemon = True
+        thread_asignaciones.daemon = False
         thread_asignaciones.start()
 
         # Bucle principal para movimiento
@@ -167,7 +169,11 @@ class Taxi:
             except Exception as e:
                 print(f"Error en bucle principal del taxi {self.id}: {e}")
 
-        self.running = False
+            # Esperamos a que termine el último servicio
+            while self.ocupado:
+                time.sleep(0.1)
+
+        # Esperamos a que el hilo de asignaciones termine
         thread_asignaciones.join(timeout=1)
 
         # Cerrar conexiones

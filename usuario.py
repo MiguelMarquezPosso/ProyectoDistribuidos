@@ -1,19 +1,19 @@
-# usuario.py
+#usuario.py
 import zmq
 import threading
 import time
 import sys
 
 # Direcciones IP de los componentes
-BROKER_IP = "127.0.0.1"       # IP del broker
-SERVIDOR_IP = "127.0.0.1"    # IP del servidor central
-TAXI_IP = "127.0.0.1"      # IP base para taxis
-USUARIO_IP = "127.0.0.1"     # IP base para usuarios
+BROKER_IP = "127.0.0.1"  # IP del broker
+SERVIDOR_IP = "127.0.0.1"  # IP del servidor central
+TAXI_IP = "127.0.0.1"  # IP base para taxis
+USUARIO_IP = "127.0.0.1"  # IP base para usuarios
 
 # Puertos del sistema
-BROKER_FRONTEND_PORT = 5559       # Para publicadores (taxis y servidor)
-BROKER_BACKEND_PORT = 5560        # Para suscriptores (taxis y servidor)
-USUARIO_SERVER_PORT = 5555        # Para comunicación usuario-servidor
+BROKER_FRONTEND_PORT = 5559  # Para publicadores (taxis y servidor)
+BROKER_BACKEND_PORT = 5560  # Para suscriptores (taxis y servidor)
+USUARIO_SERVER_PORT = 5555  # Para comunicación usuario-servidor
 
 # Configuraciones completas
 BROKER_FRONTEND_URL = f"tcp://*:{BROKER_FRONTEND_PORT}"
@@ -21,6 +21,7 @@ BROKER_BACKEND_URL = f"tcp://*:{BROKER_BACKEND_PORT}"
 BROKER_FRONTEND_CONNECT = f"tcp://{BROKER_IP}:{BROKER_FRONTEND_PORT}"
 BROKER_BACKEND_CONNECT = f"tcp://{BROKER_IP}:{BROKER_BACKEND_PORT}"
 USUARIO_SERVER_URL = f"tcp://{SERVIDOR_IP}:{USUARIO_SERVER_PORT}"
+
 
 class Usuario(threading.Thread):
     def __init__(self, id_usuario, pos_inicial, tiempo_espera, N, M):
@@ -31,28 +32,35 @@ class Usuario(threading.Thread):
         self.N = N
         self.M = M
 
+        # Inicialización del contexto ZMQ
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.REQ)
-        self.socket.connect(USUARIO_SERVER_URL) # 5555
+        self.socket.connect(USUARIO_SERVER_URL)
 
     def solicitar_taxi(self):
         try:
             print(f"\nUsuario {self.id}: Iniciando solicitud de taxi desde posición {self.posicion}")
-            tiempo_inicio = time.time()
 
+            # Guardamos el tiempo de inicio antes de enviar la solicitud
+            tiempo_inicio = time.perf_counter()  # Usamos perf_counter para mayor precisión
+
+            # Enviamos la solicitud al servidor
             self.socket.send_json({
                 'tipo': 'solicitud',
                 'id_usuario': self.id,
-                'posicion': self.posicion,
-                'tiempo_solicitud': tiempo_inicio
+                'posicion': self.posicion
             })
 
+            # Configuramos el poller para el timeout
             poller = zmq.Poller()
             poller.register(self.socket, zmq.POLLIN)
 
-            if poller.poll(5000):  # Timeout de 5 segundos
+            # Esperamos respuesta con timeout de 5 segundos
+            if poller.poll(5000):  # 5000 ms = 5 segundos
                 respuesta = self.socket.recv_json()
-                tiempo_respuesta = respuesta.get('tiempo_respuesta', time.time() - tiempo_inicio)
+
+                # Calculamos el tiempo de respuesta
+                tiempo_respuesta = time.perf_counter() - tiempo_inicio
 
                 if respuesta['exito']:
                     print(f"Usuario {self.id}: Taxi {respuesta['taxi_id']} asignado desde "
@@ -63,7 +71,8 @@ class Usuario(threading.Thread):
                     print(f"Usuario {self.id}: No hay taxis disponibles")
                     print(f"Usuario {self.id}: Tiempo de respuesta del servidor: {tiempo_respuesta:.3f} segundos")
             else:
-                print(f"Usuario {self.id}: Timeout en la solicitud después de 5 segundos")
+                tiempo_respuesta = time.perf_counter() - tiempo_inicio
+                print(f"Usuario {self.id}: Timeout en la solicitud después de {tiempo_respuesta:.3f} segundos")
 
             return False
 
@@ -95,7 +104,8 @@ def crear_usuarios(num_usuarios, N, M, archivo_posiciones):
             if i >= num_usuarios:
                 break
             x, y = map(int, linea.strip().split())
-            tiempo_espera = (i + 1) * 5  # Tiempo diferente para cada usuario
+            # Tiempo de espera aleatorio entre 5 y 20 segundos para cada usuario
+            tiempo_espera = 5 + (i * 3) % 15  # Más variación en los tiempos
             usuario = Usuario(i, (x, y), tiempo_espera, N, M)
             usuarios.append(usuario)
 
@@ -123,4 +133,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
