@@ -75,7 +75,7 @@ def main():
                                 f"Broker: Recibida asignación de servicio al Taxi {msg_data['taxi_id']} para Usuario {msg_data['id_usuario']}")
                             # Asegurar que el mensaje se reenvía
                             backend.send_multipart(message)
-                            print(f"Broker: Mensaje de actualización reenviado")
+                            print(f"Broker: Mensaje de asignación reenviado")
 
                         else:
                             print(f"Broker: Recibido mensaje desconocido")
