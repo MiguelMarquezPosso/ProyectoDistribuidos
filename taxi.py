@@ -3,24 +3,20 @@ import zmq
 import time
 import sys
 import random
+import json
 
-# Direcciones IP de los componentes
-BROKER_IP = "127.0.0.1"       # IP del broker
-SERVIDOR_IP = "127.0.0.1"    # IP del servidor central
-TAXI_IP = "127.0.0.1"      # IP base para taxis
-USUARIO_IP = "127.0.0.1"     # IP base para usuarios
-
-# Puertos del sistema
-BROKER_FRONTEND_PORT = 5559       # Para publicadores (taxis y servidor)
-BROKER_BACKEND_PORT = 5560        # Para suscriptores (taxis y servidor)
-USUARIO_SERVER_PORT = 5555        # Para comunicación usuario-servidor
-
-# Configuraciones completas
-BROKER_FRONTEND_URL = f"tcp://*:{BROKER_FRONTEND_PORT}"
-BROKER_BACKEND_URL = f"tcp://*:{BROKER_BACKEND_PORT}"
+# Direcciones y puertos (mantener los existentes)
+BROKER_IP = "127.0.0.1"
+BROKER_FRONTEND_PORT = 5559
+BROKER_BACKEND_PORT = 5560
 BROKER_FRONTEND_CONNECT = f"tcp://{BROKER_IP}:{BROKER_FRONTEND_PORT}"
 BROKER_BACKEND_CONNECT = f"tcp://{BROKER_IP}:{BROKER_BACKEND_PORT}"
-USUARIO_SERVER_URL = f"tcp://{SERVIDOR_IP}:{USUARIO_SERVER_PORT}"
+
+# Definición de tópicos
+TOPIC_REGISTRO = "REGISTRO"
+TOPIC_ACTUALIZACION = "ACTUALIZACION"
+TOPIC_TAXI_BASE = "TAXI"
+
 
 class Taxi:
     def __init__(self, id_taxi, N, M, pos_inicial, velocidad):
@@ -38,25 +34,31 @@ class Taxi:
 
         # Socket para publicar posiciones al broker
         self.socket_pub = self.context.socket(zmq.PUB)
-        self.socket_pub.connect(BROKER_FRONTEND_CONNECT) # 5559
+        self.socket_pub.connect(BROKER_FRONTEND_CONNECT)
 
         time.sleep(1)
 
         # Socket para recibir asignaciones a través del broker
         self.socket_sub = self.context.socket(zmq.SUB)
-        self.socket_sub.connect(BROKER_BACKEND_CONNECT) # 5560
-        self.socket_sub.setsockopt_string(zmq.SUBSCRIBE, "")
+        self.socket_sub.connect(BROKER_BACKEND_CONNECT)
+
+        # Suscribirse a tópicos relevantes
+        self.taxi_topic = f"{TOPIC_TAXI_BASE}.{self.id}"
+        self.socket_sub.setsockopt_string(zmq.SUBSCRIBE, self.taxi_topic)
 
         time.sleep(1)
 
-        # Enviar mensaje de registro inicial
+        # Enviar mensaje de registro inicial con tópico
         mensaje_registro = {
             'tipo': 'registro',
             'id': self.id,
             'posicion': self.posicion,
             'velocidad': self.velocidad
         }
-        self.socket_pub.send_json(mensaje_registro)
+        self.socket_pub.send_multipart([
+            TOPIC_REGISTRO.encode(),
+            json.dumps(mensaje_registro).encode()
+        ])
         print(f"Taxi {self.id}: Registrado en el sistema en posición {self.posicion}")
 
     def publicar_posicion(self):
@@ -69,29 +71,29 @@ class Taxi:
             'servicios': self.servicios,
             'timestamp': tiempo_actual
         }
-        self.socket_pub.send_json(mensaje)
+        self.socket_pub.send_multipart([
+            TOPIC_ACTUALIZACION.encode(),
+            json.dumps(mensaje).encode()
+        ])
         print(f"Taxi {self.id}: Nueva posición {self.posicion} | Ocupado: {self.ocupado} | Servicios: {self.servicios}")
 
     def mover(self):
         if self.ocupado or self.velocidad == 0:
             return
 
-        # Calcular distancia a mover basada en la velocidad
-        # velocidad es km/h, y queremos mover cada 30 minutos
-        distancia = (self.velocidad * 0.5)  # distancia en km por 30 minutos
-        celdas = int(distancia)  # cada celda es 1km
+        distancia = (self.velocidad * 0.5)
+        celdas = int(distancia)
 
-        # Decidir dirección aleatoria (vertical u horizontal)
-        if random.choice([True, False]):  # Movimiento horizontal
+        if random.choice([True, False]):
             dx = random.choice([-1, 1]) * celdas
             nueva_x = max(0, min(self.N, self.posicion[0] + dx))
-            if nueva_x != self.posicion[0]:  # Solo actualizar si realmente se movió
+            if nueva_x != self.posicion[0]:
                 self.posicion = (nueva_x, self.posicion[1])
                 return True
-        else:  # Movimiento vertical
+        else:
             dy = random.choice([-1, 1]) * celdas
             nueva_y = max(0, min(self.M, self.posicion[1] + dy))
-            if nueva_y != self.posicion[1]:  # Solo actualizar si realmente se movió
+            if nueva_y != self.posicion[1]:
                 self.posicion = (self.posicion[0], nueva_y)
                 return True
 
@@ -99,24 +101,23 @@ class Taxi:
 
     def procesar_asignaciones(self):
         try:
-            mensaje = self.socket_sub.recv_json(flags=zmq.NOBLOCK)
-            if (mensaje.get('tipo') == 'servicio_asignado' and
-                    mensaje.get('taxi_id') == self.id):
+            mensaje_raw = self.socket_sub.recv_multipart(flags=zmq.NOBLOCK)
+            topic = mensaje_raw[0].decode()
+            mensaje = json.loads(mensaje_raw[1].decode())
 
-                print(f"\nTaxi {self.id}: Recibida asignación de servicio")
+            if topic == self.taxi_topic and mensaje.get('tipo') == 'servicio_asignado':
+                print(f"\nTaxi {self.id}: Recibida asignación de servicio en tópico {topic}")
                 print(f"Taxi {self.id}: Usuario {mensaje['id_usuario']} en posición {mensaje['pos_usuario']}")
                 print(f"Taxi {self.id}: Mi posición actual {self.posicion}")
 
                 self.ocupado = True
                 self.servicios += 1
 
-                # Notificar que estamos ocupados
                 self.publicar_posicion()
 
                 print(f"Taxi {self.id}: Iniciando servicio #{self.servicios}")
-                time.sleep(30)  # Duración del servicio
+                time.sleep(30)
 
-                # Volver a posición inicial
                 self.posicion = self.pos_inicial
                 self.ocupado = False
                 print(f"Taxi {self.id}: Servicio completado, volviendo a posición inicial {self.pos_inicial}")
@@ -143,9 +144,9 @@ class Taxi:
                     break
 
                 if not self.ocupado and self.velocidad > 0:
-                    time.sleep(30)  # Esperar 30 segundos (30 minutos simulados)
-                    self.mover()
-                    self.publicar_posicion()
+                    time.sleep(30)
+                    if self.mover():
+                        self.publicar_posicion()
 
             except Exception as e:
                 print(f"Error en taxi {self.id}: {e}")
