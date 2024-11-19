@@ -4,6 +4,8 @@ import threading
 import time
 import json
 
+from base_de_datos import BaseDeDatos
+
 # Direcciones y puertos (mantener los existentes)
 BROKER_IP = "127.0.0.1"
 BROKER_FRONTEND_PORT = 5559
@@ -30,6 +32,7 @@ class ServidorCentral:
         self.taxis = {}
         self.context = zmq.Context()
         self.lock = threading.Lock()
+        self.db = BaseDeDatos()  # Instancia de la base de datos
 
         # Socket para recibir actualizaciones de posición de taxis
         self.socket_sub = self.context.socket(zmq.SUB)
@@ -90,6 +93,9 @@ class ServidorCentral:
                             self.taxis[taxi_id]['ultima_asignacion'] = time.time()
                             pos_taxi = self.taxis[taxi_id]['pos']
 
+                            # Registrar servicio en la base de datos
+                            # self.db.registrar_servicio(taxi_id, pos_taxi, pos_usuario)
+
                             print(f"Servidor: Asignando Taxi {taxi_id} en {pos_taxi} al Usuario {id_usuario}")
                             print(f"Servidor: Taxi {taxi_id} ha realizado {self.taxis[taxi_id]['servicios']} servicios")
 
@@ -116,9 +122,11 @@ class ServidorCentral:
                             }
                         else:
                             print(f"Servidor: Taxi {taxi_id} ya fue asignado, buscando otro...")
+                            #self.db.registrar_servicio_rechazado()
                             respuesta = {'exito': False}
                 else:
                     print(f"Servidor: No hay taxis disponibles para Usuario {id_usuario}")
+                    #self.db.registrar_servicio_rechazado()
                     respuesta = {'exito': False}
 
                 self.socket_rep.send_json(respuesta)
@@ -144,6 +152,8 @@ class ServidorCentral:
                             'servicios': 0,
                             'velocidad': mensaje.get('velocidad', 0)
                         }
+                        # Registrar nuevo taxi en la base de datos
+                        # self.db.registrar_taxi(taxi_id, mensaje['posicion'], mensaje.get('velocidad', 0))
                         print(f"\nServidor: REGISTRADO nuevo Taxi {taxi_id} en posición {mensaje['posicion']}")
                         print(f"Servidor: Taxis registrados actualmente: {list(self.taxis.keys())}")
 
@@ -155,6 +165,8 @@ class ServidorCentral:
                                 'ocupado': mensaje.get('ocupado', False),
                                 'servicios': mensaje.get('servicios', 0)
                             })
+                            # Actualizar posición en la base de datos
+                            # self.db.actualizar_posicion_taxi(taxi_id, nueva_pos)
                             print(f"Servidor: Actualizada posición del Taxi {taxi_id} a {mensaje['posicion']}")
                         else:
                             print(f"Servidor: Recibida actualización de taxi no registrado {taxi_id}")

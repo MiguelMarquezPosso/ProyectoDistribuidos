@@ -1,46 +1,33 @@
-#base_de_datos
+import zmq
 import threading
 import time
 import json
 from pathlib import Path
 
+#base_de_datos
 class BaseDeDatos:
     def __init__(self, archivo="base_de_datos.json"):
         self.archivo = archivo
         self.lock = threading.Lock()
-        # Inicializar la estructura de datos base
         self.datos = {
-            "taxis": {},
-            "historial_posiciones": {},
-            "servicios_por_taxi": {},  # Este es el campo que está causando problemas
-            "servicios_asignados": [],
+            "taxis": {},  # Información de taxis registrados
+            "historial_posiciones": {},  # Historial de posiciones por taxi
+            "servicios_por_taxi": {},  # Contador de servicios por taxi
+            "servicios_asignados": [],  # Detalles de cada servicio asignado
             "estadisticas": {
                 "servicios_exitosos": 0,
                 "servicios_rechazados": 0
             }
         }
-
-        # Asegurarnos de que el archivo existe y tiene la estructura correcta
-        if not Path(self.archivo).exists():
-            self.guardar_datos()
-        else:
-            self.cargar_datos()
+        self.cargar_datos()
 
     def cargar_datos(self):
         try:
             if Path(self.archivo).exists():
                 with open(self.archivo, 'r') as f:
-                    datos_cargados = json.load(f)
-                    # Asegurarse de que todos los campos necesarios existen
-                    for campo in ["taxis", "historial_posiciones", "servicios_por_taxi",
-                                "servicios_asignados", "estadisticas"]:
-                        if campo not in datos_cargados:
-                            datos_cargados[campo] = self.datos[campo]
-                    self.datos = datos_cargados
+                    self.datos = json.load(f)
         except Exception as e:
             print(f"Error cargando base de datos: {e}")
-            # Si hay error, mantener la estructura por defecto
-            self.guardar_datos()
 
     def guardar_datos(self):
         with self.lock:
@@ -52,30 +39,14 @@ class BaseDeDatos:
 
     def registrar_taxi(self, taxi_id, posicion, velocidad):
         with self.lock:
-            str_taxi_id = str(taxi_id)
-            # Asegurarse de que todas las estructuras necesarias existen
-            if "taxis" not in self.datos:
-                self.datos["taxis"] = {}
-            if "historial_posiciones" not in self.datos:
-                self.datos["historial_posiciones"] = {}
-            if "servicios_por_taxi" not in self.datos:
-                self.datos["servicios_por_taxi"] = {}
-
-            # Registrar el taxi
-            self.datos["taxis"][str_taxi_id] = {
+            self.datos["taxis"][str(taxi_id)] = {
                 "id": taxi_id,
                 "posicion_inicial": posicion,
                 "velocidad": velocidad,
                 "fecha_registro": time.strftime("%Y-%m-%d %H:%M:%S")
             }
-
-            # Inicializar las estructuras relacionadas
-            if str_taxi_id not in self.datos["historial_posiciones"]:
-                self.datos["historial_posiciones"][str_taxi_id] = []
-
-            if str_taxi_id not in self.datos["servicios_por_taxi"]:
-                self.datos["servicios_por_taxi"][str_taxi_id] = 0
-
+            self.datos["historial_posiciones"][str(taxi_id)] = []
+            self.datos["servicios_por_taxi"][str(taxi_id)] = 0
             self.guardar_datos()
 
     def actualizar_posicion_taxi(self, taxi_id, posicion):
