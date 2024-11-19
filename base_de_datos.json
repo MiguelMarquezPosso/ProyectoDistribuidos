@@ -1,0 +1,10 @@
+{
+    "taxis": {},
+    "historial_posiciones": {},
+    "servicios_por_taxi": {},
+    "servicios_asignados": [],
+    "estadisticas": {
+        "servicios_exitosos": 0,
+        "servicios_rechazados": 0
+    }
+}

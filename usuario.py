@@ -1,4 +1,5 @@
 #usuario.py
+import random
 import zmq
 import threading
 import time
@@ -104,8 +105,8 @@ def crear_usuarios(num_usuarios, N, M, archivo_posiciones):
             if i >= num_usuarios:
                 break
             x, y = map(int, linea.strip().split())
-            # Tiempo de espera aleatorio entre 5 y 20 segundos para cada usuario
-            tiempo_espera = 5 + (i * 3) % 15  # Más variación en los tiempos
+            # Tiempo de espera aleatorio entre para cada usuario
+            tiempo_espera = random.uniform(1,3)
             usuario = Usuario(i, (x, y), tiempo_espera, N, M)
             usuarios.append(usuario)
 
